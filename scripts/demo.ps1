@@ -1,7 +1,7 @@
 param([string]$BaseUrl = 'http://localhost:8081')
 $ErrorActionPreference = 'Stop'
 $BaseUrl = $BaseUrl.TrimEnd('/')
-$clienteUri = $null
+$criados = New-Object System.Collections.Generic.List[string]
 
 # Somente a raiz e conhecida; todas as outras URIs vem dos links HATEOAS das respostas.
 function Requisitar([string]$Metodo, [string]$Uri, $Corpo = $null, [string]$Aceita = 'application/hal+json') {
@@ -17,58 +17,58 @@ function Link($Recurso, [string]$Relacao) {
     if ($null -eq $link) { throw "Link '$Relacao' ausente." }
     $link.href -replace '\{.*\}', ''
 }
+function Criar([string]$Uri, $Corpo) {
+    $recurso = Requisitar POST $Uri $Corpo
+    $criados.Insert(0, (Link $recurso 'self'))
+    $recurso
+}
 function Conferir([bool]$Condicao, [string]$Mensagem) {
     if (!$Condicao) { throw $Mensagem }
 }
 
 try {
     $raiz = Requisitar GET "$BaseUrl/"
-    $colecao = Link $raiz 'clientes'
-    Write-Host "Nivel 3: raiz aponta para $colecao"
+    $empresa = Criar (Link $raiz 'empresas') @{ razaoSocial = 'Car service toyota ltda'; nomeFantasia = 'Car service' }
+    Write-Host "Nivel 3: raiz -> empresa $(Link $empresa 'self')"
+    $null = Requisitar POST (Link $empresa 'endereco') @{ cidade = 'Sao Paulo'; rua = 'Av. Sao Joao'; numero = '00'; codigoPostal = '01035000' }
+    $null = Requisitar POST (Link $empresa 'telefones') @{ ddd = '11'; numero = '986454527' }
 
-    $cliente = Requisitar POST $colecao @{ nome = 'Cliente demonstracao'; nomeSocial = 'Demo'; dataNascimento = '1995-04-10' }
-    $clienteUri = Link $cliente 'self'
-    $consultado = Requisitar GET $clienteUri
-    Conferir ($consultado.nome -eq 'Cliente demonstracao') 'Falha na consulta do cliente.'
-    $cliente = Requisitar PUT $clienteUri @{ nome = 'Cliente atualizado'; nomeSocial = ''; dataNascimento = '1995-04-10' }
-    Conferir ($cliente.nome -eq 'Cliente atualizado') 'Falha na atualizacao do cliente.'
-    $pagina = Requisitar GET "$colecao`?pagina=0&tamanho=10"
-    Conferir ($pagina.page.totalElements -ge 1 -and $null -ne $pagina._links.first) 'Falha na listagem paginada.'
+    $usuarios = Link $empresa 'usuarios'
+    $cliente = Criar $usuarios @{ nome = 'Dom Pedro cliente'; perfis = @('CLIENTE'); documentos = @(@{ tipo = 'CPF'; numero = [guid]::NewGuid().ToString('N').Substring(0, 11); dataEmissao = '2020-01-01' }) }
+    $funcionario = Criar $usuarios @{ nome = 'Dom Pedro funcionario'; perfis = @('FUNCIONARIO') }
+    $fornecedor = Criar $usuarios @{ nome = 'Loja do carro'; perfis = @('FORNECEDOR') }
+    $null = Requisitar POST (Link $cliente 'emails') @{ endereco = 'cliente@autobots.example' }
+    $credencial = Requisitar POST (Link $funcionario 'credenciais') @{ tipo = 'USUARIO_SENHA'; nomeUsuario = "func$([guid]::NewGuid().ToString('N').Substring(0, 8))"; senha = [guid]::NewGuid().ToString() }
+    Conferir ($null -eq $credencial.senha) 'A senha nao pode aparecer na resposta.'
+    Write-Host 'Usuarios: cliente, funcionario e fornecedor associados a empresa; credencial sem senha na resposta.'
 
-    $formulario = Requisitar GET $clienteUri -Aceita 'application/prs.hal-forms+json'
+    $veiculo = Criar (Link $cliente 'veiculos') @{ tipo = 'SUV'; modelo = 'corolla-cross'; placa = 'ABC0000' }
+    $roda = Criar (Link $empresa 'mercadorias') @{ nome = 'Roda de liga leve'; quantidade = 30; valor = 300.00; fornecedorId = $fornecedor.id }
+    $troca = Criar (Link $empresa 'servicos') @{ nome = 'Troca de rodas'; valor = 50.00 }
+    $alinhamento = Criar (Link $empresa 'servicos') @{ nome = 'Alinhamento'; valor = 50.00 }
+
+    $venda = Criar (Link $empresa 'vendas') @{
+        identificacao = [guid]::NewGuid().ToString('N').Substring(0, 10); clienteId = $cliente.id; funcionarioId = $funcionario.id
+        veiculoId = $veiculo.id; mercadorias = @(@{ id = $roda.id; quantidade = 4 })
+        servicos = @(@{ id = $troca.id; quantidade = 1 }, @{ id = $alinhamento.id; quantidade = 1 })
+    }
+    Conferir ([decimal]$venda.valorTotal -eq 1300) "Total inesperado: $($venda.valorTotal)."
+    Conferir ((Requisitar GET (Link $roda 'self')).quantidade -eq 26) 'A venda deveria baixar o estoque para 26.'
+    Conferir ((Link $venda 'veiculo') -eq (Link $veiculo 'self')) 'Venda sem link para o veiculo.'
+    $compras = Requisitar GET (Link $cliente 'compras')
+    Conferir ($compras.page.totalElements -eq 1) 'Falha nas compras do cliente.'
+    $vendasDoVeiculo = Requisitar GET (Link $veiculo 'vendas')
+    Conferir ($vendasDoVeiculo.page.totalElements -eq 1) 'Falha nas vendas do veiculo.'
+    Write-Host 'Venda: total 1300.00, estoque baixado de 30 para 26, links para cliente, funcionario e veiculo.'
+
+    $formulario = Requisitar GET (Link $cliente 'self') -Aceita 'application/prs.hal-forms+json'
     Conferir ($formulario._templates.default.method -eq 'PUT' -and $formulario._templates.cadastrar.method -eq 'POST') 'Falha nos templates HAL-FORMS.'
-    Write-Host 'HAL-FORMS: cliente anuncia PUT, DELETE e cadastro de endereco.'
+    Write-Host 'HAL-FORMS: usuario anuncia PUT, DELETE e cadastro de endereco.'
 
-    $enderecoUri = Link $cliente 'endereco'
-    $endereco = @{ estado = 'SP'; cidade = 'Sao Paulo'; bairro = 'Centro'; rua = 'Rua Um'; numero = '10'; codigoPostal = '01001000'; informacoesAdicionais = 'Casa' }
-    $criado = Requisitar POST $enderecoUri $endereco
-    Conferir ((Link $criado 'cliente') -eq $clienteUri) 'Endereco sem link para o cliente.'
-    $endereco.codigoPostal = '01311000'
-    $null = Requisitar PUT (Link $criado 'self') $endereco
-    $consultaEndereco = Requisitar GET $enderecoUri
-    Conferir ($consultaEndereco.codigoPostal -eq '01311000') 'Falha na atualizacao do CEP.'
-
-    $numero = [guid]::NewGuid().ToString('N')
-    $documento = Requisitar POST (Link $cliente 'documentos') @{ tipo = 'RG'; numero = $numero }
-    $documentoUri = Link $documento 'self'
-    $null = Requisitar PUT $documentoUri @{ tipo = 'CNH'; numero = $numero }
-    $consultaDocumento = Requisitar GET $documentoUri
-    Conferir ($consultaDocumento.tipo -eq 'CNH') 'Falha na atualizacao do documento.'
-    $listaDocumentos = Requisitar GET (Link $documento 'documentos')
-    Conferir (@($listaDocumentos._embedded.documentos).Count -eq 1) 'Falha na listagem de documentos.'
-
-    $telefone = Requisitar POST (Link $cliente 'telefones') @{ ddd = '11'; numero = '999998888' }
-    $telefoneUri = Link $telefone 'self'
-    $null = Requisitar PUT $telefoneUri @{ ddd = '12'; numero = '988887777' }
-    $consultaTelefone = Requisitar GET $telefoneUri
-    Conferir ($consultaTelefone.ddd -eq '12') 'Falha na atualizacao do telefone.'
-    $listaTelefones = Requisitar GET (Link $telefone 'telefones')
-    Conferir (@($listaTelefones._embedded.telefones).Count -eq 1) 'Falha na listagem de telefones.'
-
-    $cabecalho = Invoke-WebRequest -Method Head -Uri $clienteUri -UseBasicParsing
+    $cabecalho = Invoke-WebRequest -Method Head -Uri (Link $empresa 'self') -UseBasicParsing
     Conferir ($cabecalho.StatusCode -eq 200 -and $cabecalho.Content.Length -eq 0) 'Falha no HEAD.'
     try {
-        $null = Invoke-WebRequest -Method Patch -Uri $clienteUri -ContentType 'application/json' -Body '{}' -UseBasicParsing
+        $null = Invoke-WebRequest -Method Patch -Uri (Link $empresa 'self') -ContentType 'application/json' -Body '{}' -UseBasicParsing
         throw 'PATCH deveria retornar 405.'
     } catch {
         $resposta = $_.Exception.Response
@@ -76,14 +76,10 @@ try {
     }
     Write-Host 'Nivel 2: HEAD 200 sem corpo e PATCH 405.'
 
-    $null = Requisitar DELETE $documentoUri
-    $null = Requisitar DELETE $telefoneUri
-    $null = Requisitar DELETE $enderecoUri
-    $final = Requisitar GET $clienteUri
-    Conferir ($final.documentos.Count -eq 0 -and $final.telefones.Count -eq 0 -and $null -eq $final.endereco) 'Falha na exclusao dos dados vinculados.'
-    $null = Requisitar DELETE $clienteUri
-    $clienteUri = $null
-    Write-Host 'CRUDs de cliente, endereco, documento e telefone verificados por HTTP, navegando apenas por links.'
+    $null = Requisitar DELETE (Link $venda 'self')
+    $criados.Remove((Link $venda 'self')) | Out-Null
+    Conferir ((Requisitar GET (Link $roda 'self')).quantidade -eq 30) 'Excluir a venda deveria devolver o estoque.'
+    Write-Host 'Venda excluida e estoque devolvido. CRUDs verificados por HTTP, navegando apenas por links.'
 } finally {
-    if ($null -ne $clienteUri) { $null = Requisitar DELETE $clienteUri }
+    foreach ($uri in $criados) { try { $null = Requisitar DELETE $uri } catch { Write-Warning "Nao foi possivel excluir $uri" } }
 }

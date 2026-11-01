@@ -1,31 +1,28 @@
 # Origem do projeto
 
-## Base direta: entrega da ATVI
+## Base direta: entrega da ATVII
 
-Esta entrega continua o projeto https://github.com/Yuri-Dev-OH/atv1_java (commit `0f6a452`), que completou os CRUDs de cliente, endereço, documento e telefone sobre a base do professor da ATVI (https://github.com/gerson-pn/atvi-autobots-microservico-spring, commit `d5bdb729abee6e6d39b9e23aed202ebc66912ce9`).
+Esta entrega continua o projeto https://github.com/Yuri-Dev-OH/atv2_java (commit `07985bc`), que levou a API aos quatro níveis do Richardson Maturity Model com HAL, HAL-FORMS e Problem Details. A ATVII, por sua vez, continuou a ATVI (https://github.com/Yuri-Dev-OH/atv1_java), que completou os CRUDs de cliente, endereço, documento e telefone.
 
-Já vinham da ATVI: Spring Boot 3.5 e Java 21, DTOs validados, serviços transacionais, Flyway, H2 em arquivo, bloqueio pessimista por cliente e verificação de pertencimento nas URLs.
+Já vinham das entregas anteriores: Spring Boot 3.5 e Java 21, DTOs validados, serviços transacionais, Flyway, H2 em arquivo, bloqueio pessimista, verificação de pertencimento nas URLs, `AdicionadorLink*`, paginação com links e erros em `application/problem+json`.
 
-## Referência da ATVII
+## Referência da ATVIII
 
-Repositório indicado no PDF: https://github.com/gerson-pn/atvii-autobots-microservico-spring (branch `master`, commit único, consultado em 18/10/2026).
+Repositório indicado no PDF: https://github.com/gerson-pn/atviii-autobots-microservico-spring (branch `master`, commit `d0d4c21`, consultado em 01/11/2026).
 
 O que essa base contém:
 
-- Spring Boot 2.6.4, Java 17 e `spring-boot-starter-hateoas`.
-- A entidade `Cliente` estende `RepresentationModel<Cliente>`.
-- A interface `AdicionadorLink<T>` e o componente `AdicionadorLinkCliente`, que usa `WebMvcLinkBuilder.linkTo(methodOn(...))`.
-- Links somente para o cliente: `self` nos itens da lista e `clientes` no item individual.
-- Consultas retornando `302 FOUND`, e `404` para lista vazia.
+- Spring Boot 2.6.7, Java 17, MySQL (`root`/`root` em `application.properties`) e `ddl-auto=create`.
+- Entidades: `Empresa`, `Usuario`, `Endereco`, `Telefone`, `Documento`, `Email`, `Credencial` (abstrata, herança `JOINED`), `CredencialUsuarioSenha`, `CredencialCodigoBarra`, `Veiculo`, `Mercadoria`, `Servico` e `Venda`.
+- Enumerações: `PerfilUsuario`, `TipoDocumento` e `TipoVeiculo`.
+- Apenas `RepositorioEmpresa` e um `CommandLineRunner` com dados de exemplo; não há controllers, serviços, CRUD nem HATEOAS.
 
 ## Alterações nesta entrega
 
-- `spring-boot-starter-hateoas` adicionado; HAL e HAL-FORMS habilitados.
-- `AdicionadorLinkCliente`, `AdicionadorLinkEndereco`, `AdicionadorLinkDocumento` e `AdicionadorLinkTelefone` no pacote `modelo`, com links e affordances para todos os recursos.
-- `RaizControle` (`GET /`) como ponto de entrada.
-- A listagem de clientes passou a usar `PagedModel` com links `first`, `prev`, `next` e `last`, mantendo os parâmetros `pagina` e `tamanho` e sua validação.
-- `Location` das criações passou a ser absoluto e igual ao link `self`.
-- Erros passaram a usar Problem Details (`application/problem+json`), inclusive os erros do próprio Spring MVC (405, 406 e 415).
-- Coleções no formato HAL (`_embedded`), com testes e `scripts/demo.ps1` atualizados.
-
-As justificativas das diferenças em relação à base da ATVII estão em [requisitos.md](requisitos.md#decisões-em-relação-à-base-do-professor).
+- `Cliente` deu lugar a `Usuario` com perfis; as rotas `/clientes` foram substituídas por `/empresas/{empresaId}/usuarios`.
+- Novas entidades e enumerações da base do professor, com as correções descritas em [requisitos.md](requisitos.md#decisões-em-relação-à-base-do-professor).
+- Migração `V2__atualizacao_de_base.sql`, que preserva os dados de um banco da ATVII.
+- CRUD e HATEOAS para empresa, endereço e telefones da empresa, usuário, endereço e telefones do usuário, documentos, e-mails, credenciais, veículos, mercadorias, serviços e vendas.
+- `CodificadorSenha` (PBKDF2 do JDK) no pacote `seguranca`, preparando a "atualização de segurança".
+- `DadosDemonstracao` com os dados de exemplo do professor no perfil `demo`.
+- Testes, `scripts/demo.ps1`, README e diagrama refeitos para o novo modelo.

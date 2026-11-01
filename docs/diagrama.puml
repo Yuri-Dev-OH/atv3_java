@@ -1,11 +1,28 @@
 @startuml
-title AutoBots - cadastro de clientes (RMM nível 3)
-class Cliente {
+title AutoBots - atualização de base (ATVIII)
+hide empty members
+
+enum PerfilUsuario { CLIENTE\nFUNCIONARIO\nFORNECEDOR }
+enum TipoDocumento { CPF\nCNPJ\nRG\nCNH\nPASSAPORTE\nOUTRO }
+enum TipoVeiculo { HATCH\nSEDA\nSUV\nPICKUP\nSW }
+
+interface Titular {
+  Endereco getEndereco()
+  List<Telefone> getTelefones()
+}
+class Empresa {
+  Long id
+  String razaoSocial
+  String nomeFantasia
+  Instant cadastro
+}
+class Usuario {
   Long id
   String nome
   String nomeSocial
   LocalDate dataNascimento
   Instant dataCadastro
+  Set<PerfilUsuario> perfis
 }
 class Endereco {
   Long id
@@ -17,71 +34,114 @@ class Endereco {
   String codigoPostal
   String informacoesAdicionais
 }
-class Documento {
-  Long id
-  String tipo
-  String numero
-}
 class Telefone {
   Long id
   String ddd
   String numero
 }
-Cliente "1" *-- "0..1" Endereco
-Cliente "1" *-- "0..*" Documento
-Cliente "1" *-- "0..*" Telefone
-package "HTTP" {
+class Documento {
+  Long id
+  TipoDocumento tipo
+  String numero
+  LocalDate dataEmissao
+}
+class Email {
+  Long id
+  String endereco
+}
+abstract class Credencial {
+  Long id
+  Instant criacao
+  Instant ultimoAcesso
+  boolean inativo
+}
+class CredencialUsuarioSenha {
+  String nomeUsuario
+  String senha <<hash PBKDF2>>
+}
+class CredencialCodigoBarra {
+  Long codigo
+}
+class Veiculo {
+  Long id
+  TipoVeiculo tipo
+  String modelo
+  String placa
+}
+class Mercadoria {
+  Long id
+  String nome
+  String descricao
+  LocalDate fabricacao
+  LocalDate validade
+  Instant cadastro
+  long quantidade
+  BigDecimal valor
+}
+class Servico {
+  Long id
+  String nome
+  String descricao
+  BigDecimal valor
+}
+class Venda {
+  Long id
+  String identificacao
+  Instant cadastro
+}
+class ItemMercadoria <<embeddable>> {
+  String nome
+  int quantidade
+  BigDecimal valorUnitario
+}
+class ItemServico <<embeddable>> {
+  String nome
+  int quantidade
+  BigDecimal valorUnitario
+}
+
+Titular <|.. Empresa
+Titular <|.. Usuario
+Credencial <|-- CredencialUsuarioSenha
+Credencial <|-- CredencialCodigoBarra
+
+Empresa "1" *-- "0..1" Endereco
+Empresa "1" *-- "0..*" Telefone
+Empresa "1" o-- "0..*" Usuario : usuarios
+Empresa "1" o-- "0..*" Mercadoria : estoque
+Empresa "1" o-- "0..*" Servico : catálogo
+Empresa "1" o-- "0..*" Venda
+
+Usuario "1" *-- "0..1" Endereco
+Usuario "1" *-- "0..*" Telefone
+Usuario "1" *-- "0..*" Documento
+Usuario "1" *-- "0..*" Email
+Usuario "1" *-- "0..*" Credencial
+Usuario "1" *-- "0..*" Veiculo : proprietario (CLIENTE)
+Usuario "0..1" -- "0..*" Mercadoria : fornecedor (FORNECEDOR)
+
+Venda "0..*" --> "1" Usuario : cliente (CLIENTE)
+Venda "0..*" --> "1" Usuario : funcionario (FUNCIONARIO)
+Venda "0..*" --> "0..1" Veiculo
+Venda "1" *-- "0..*" ItemMercadoria
+Venda "1" *-- "0..*" ItemServico
+ItemMercadoria "0..*" --> "1" Mercadoria
+ItemServico "0..*" --> "1" Servico
+
+package "API (RMM nível 3)" {
   class RaizControle
-  class ClienteControle
-  class EnderecoControle
-  class DocumentoControle
-  class TelefoneControle
-}
-package "Regras e transações" {
-  class ClienteServico
-  class EnderecoServico
-  class DocumentoServico
-  class TelefoneServico
-  class ClienteSelecionador
-  class ClienteAtualizador
-  class EnderecoAtualizador
-  class DocumentoAtualizador
-  class TelefoneAtualizador
-}
-package "HATEOAS (Spring HATEOAS)" {
-  class AdicionadorLinkCliente
-  class AdicionadorLinkEndereco
-  class AdicionadorLinkDocumento
-  class AdicionadorLinkTelefone
+  class EmpresaControle
+  class UsuarioControle
+  class "EmpresaEnderecoControle\nUsuarioEnderecoControle" as EnderecoControles
+  class "EmpresaTelefoneControle\nUsuarioTelefoneControle" as TelefoneControles
+  class "DocumentoControle\nEmailControle\nCredencialControle\nVeiculoControle" as SubrecursoControles
+  class "MercadoriaControle\nServicoControle\nVendaControle" as LojaControles
+  class "AdicionadorLink*" as AdicionadoresLink
   class HipermidiaConfiguracao
+  class TratadorErros
 }
-interface ClienteRepositorio
-ClienteControle --> AdicionadorLinkCliente
-EnderecoControle --> AdicionadorLinkEndereco
-DocumentoControle --> AdicionadorLinkDocumento
-TelefoneControle --> AdicionadorLinkTelefone
-RaizControle ..> ClienteControle : link "clientes"
-ClienteControle --> ClienteServico
-EnderecoControle --> EnderecoServico
-DocumentoControle --> DocumentoServico
-TelefoneControle --> TelefoneServico
-ClienteServico --> ClienteSelecionador
-EnderecoServico --> ClienteSelecionador
-DocumentoServico --> ClienteSelecionador
-TelefoneServico --> ClienteSelecionador
-ClienteServico --> ClienteAtualizador
-EnderecoServico --> EnderecoAtualizador
-DocumentoServico --> DocumentoAtualizador
-TelefoneServico --> TelefoneAtualizador
-ClienteSelecionador --> ClienteRepositorio
-ClienteRepositorio --> Cliente
-note bottom of Cliente
-Cadastro e exclusão em cascata.
-Endereço pode ficar ausente durante o cadastro.
-Contatos não são compartilhados entre entidades Cliente.
-end note
-note right of AdicionadorLinkCliente
-Geram _links (HAL) e _templates (HAL-FORMS)
-a partir dos metodos dos controles (linkTo, methodOn, afford).
-end note
+RaizControle ..> EmpresaControle : link empresas
+EmpresaControle ..> AdicionadoresLink
+UsuarioControle ..> AdicionadoresLink
+LojaControles ..> AdicionadoresLink
 @enduml

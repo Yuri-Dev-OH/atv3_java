@@ -6,7 +6,7 @@ RUN mvn -B verify
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
-COPY --from=build /app/target/automanager-2.0.0.jar app.jar
+COPY --from=build /app/target/automanager-3.0.0.jar app.jar
 EXPOSE 8081
 ENTRYPOINT ["java", "-jar", "app.jar"]
-
+#https://www.youtube.com/watch?v=dQw4w9WgXcQ

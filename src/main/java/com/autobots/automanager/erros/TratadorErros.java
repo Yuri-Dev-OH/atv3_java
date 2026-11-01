@@ -35,9 +35,15 @@ public class TratadorErros extends ResponseEntityExceptionHandler {
     public ProblemDetail conflito(Conflito erro) {
         return problema(HttpStatus.CONFLICT, "Conflito.", erro.getMessage());
     }
+    @ExceptionHandler(RegraNegocio.class)
+    public ProblemDetail regra(RegraNegocio erro) {
+        return problema(HttpStatus.UNPROCESSABLE_ENTITY, "Regra de negócio violada.", erro.getMessage());
+    }
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ProblemDetail integridade(DataIntegrityViolationException erro) {
-        return problema(HttpStatus.CONFLICT, "Conflito.", "Documento já cadastrado ou telefone repetido para o cliente.");
+        return problema(HttpStatus.CONFLICT, "Conflito.",
+            "Valor único já cadastrado (documento, placa, e-mail, nome de usuário, código ou identificação da venda) "
+                + "ou registro ainda vinculado a outros cadastros.");
     }
     @ExceptionHandler(PessimisticLockingFailureException.class)
     public ProblemDetail concorrencia(PessimisticLockingFailureException erro) {
@@ -48,6 +54,9 @@ public class TratadorErros extends ResponseEntityExceptionHandler {
             HttpStatusCode status, WebRequest request) {
         var detalhes = erro.getBindingResult().getFieldErrors().stream()
             .map(e -> e.getField() + ": " + e.getDefaultMessage()).sorted().toList();
+        return invalidos(headers, status, detalhes);
+    }
+    private ResponseEntity<Object> invalidos(HttpHeaders headers, HttpStatusCode status, List<String> detalhes) {
         var problema = problema(status, "Dados inválidos.", "Um ou mais campos não atendem às regras.");
         problema.setProperty("detalhes", detalhes);
         return ResponseEntity.status(status).headers(headers).body(problema);
@@ -57,10 +66,17 @@ public class TratadorErros extends ResponseEntityExceptionHandler {
             HttpStatusCode status, WebRequest request) {
         return entrada(headers, status);
     }
+    /**
+     * Trata a validação de método do Spring 6.1+, usada quando a rota tem restrições em parâmetros (como
+     * {@code @Positive} no id da URL). Nesse caso, os erros do corpo {@code @Valid} também chegam aqui.
+     */
     @Override
     protected ResponseEntity<Object> handleHandlerMethodValidationException(HandlerMethodValidationException erro,
             HttpHeaders headers, HttpStatusCode status, WebRequest request) {
-        return entrada(headers, status);
+        if (erro.getBeanResults().isEmpty()) return entrada(headers, status);
+        var detalhes = erro.getBeanResults().stream().flatMap(resultado -> resultado.getFieldErrors().stream())
+            .map(e -> e.getField() + ": " + e.getDefaultMessage()).sorted().toList();
+        return invalidos(headers, status, detalhes);
     }
     @Override
     protected ResponseEntity<Object> handleTypeMismatch(TypeMismatchException erro, HttpHeaders headers,

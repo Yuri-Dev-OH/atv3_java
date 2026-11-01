@@ -5,8 +5,8 @@
     <groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-parent</artifactId>
     <version>3.5.16</version><relativePath/>
   </parent>
-  <groupId>com.autobots</groupId><artifactId>automanager</artifactId><version>2.0.0</version>
-  <name>automanager</name><description>Cadastro de clientes da AutoBots com níveis de maturidade REST e HATEOAS</description>
+  <groupId>com.autobots</groupId><artifactId>automanager</artifactId><version>3.0.0</version>
+  <name>automanager</name><description>Gestão de empresas de manutenção veicular da AutoBots: usuários, veículos, mercadorias, serviços e vendas, com HATEOAS</description>
   <properties><java.version>21</java.version></properties>
   <dependencies>
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>

@@ -19,13 +19,14 @@ public class RaizControle {
     /**
      * Lista os recursos de primeiro nível.
      *
-     * @return links {@code self} e {@code clientes} (template com {@code pagina} e {@code tamanho})
+     * @return links {@code self} e {@code empresas} (template com {@code pagina} e {@code tamanho}); os demais
+     *     recursos ficam dentro de cada empresa
      */
     @GetMapping("/")
     public RepresentationModel<?> raiz() {
         return new RepresentationModel<>()
             .add(linkTo(methodOn(RaizControle.class).raiz()).withSelfRel())
-            .add(linkTo(methodOn(ClienteControle.class).listar(null, null)).withRel("clientes")
-                .andAffordance(afford(methodOn(ClienteControle.class).cadastrar(null))));
+            .add(linkTo(methodOn(EmpresaControle.class).listar(null, null)).withRel("empresas")
+                .andAffordance(afford(methodOn(EmpresaControle.class).cadastrar(null))));
     }
 }
